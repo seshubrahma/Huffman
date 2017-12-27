@@ -1,0 +1,53 @@
+import java.util.LinkedList;
+
+
+//Implementation of a fair priority queue that only takes in comparable objects
+public class PriorityQueue<E extends Comparable<? super E>> {
+	private int size; //size of priority queue
+	private LinkedList<E> con; //internal storage container of this priority queue
+
+	//constructor to initialize size and LinkedList container
+	public PriorityQueue() {
+		size = 0;
+		con = new LinkedList<E>();
+	}
+
+	//adds given object to priority queue based on that objects compareTo method
+	//returns true if given object has been successfully added
+	public boolean add(E toAdd) {
+		for(int i = 0; i < size; i++) {
+			if(con.get(i).compareTo(toAdd) > 0) {
+				con.add(i, toAdd);
+				size++;
+				return true;
+			}
+		}
+		con.add(toAdd);
+		size++;
+		return true;
+	}
+
+	//returns size of this priority queue
+	public int size() {
+		return size;
+	}
+
+	//removes and returns the first object in the priority queue
+	public E remove() {
+		if(size == 0)
+			throw new IllegalArgumentException("queue is empty");
+		size--;
+		return con.removeFirst();
+	}
+
+	//returns the first object in the priority queue
+	//method does not modify the object
+	public E first() {
+		return con.getFirst();
+	}
+
+	//returns if this priority queue is empty
+	public boolean isEmpty() {
+		return size == 0;
+	}
+}
