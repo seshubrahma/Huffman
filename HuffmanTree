@@ -1,0 +1,117 @@
+import java.io.IOException;
+import java.util.Map;
+import java.util.TreeMap;
+
+//class that builds the HuffmanTree by creating the frequency map and priority queue
+public class HuffmanTree {
+
+	//map that holds the ascii value of characters read in as keys and their frequency as the value
+	Map<Integer, Integer> frequency;
+
+	//a priority queue that contains TreeNodes
+	PriorityQueue<TreeNode> pq;
+
+	//the root of the HuffmanTree that acts as a reference to the entire tree
+	TreeNode root;
+
+	//constructor to make a HuffmanTree object to compress
+	public HuffmanTree(BitInputStream in) throws IOException {
+		pq = new PriorityQueue<TreeNode>();
+		frequency = new TreeMap<Integer, Integer>();
+		getMapCompress(in);
+		makePQ(frequency);
+		fillTree(pq);
+	}
+
+	//constructor to make a HuffmanTree object to decompress
+	public HuffmanTree(BitInputStream in, int header) throws IOException {
+		pq = new PriorityQueue<TreeNode>();
+		frequency = new TreeMap<Integer, Integer>();
+		if (header == IHuffConstants.STORE_COUNTS) {			
+			getMapDecompress(in);
+			makePQ(frequency);
+			fillTree(pq);
+		} else if (header == IHuffConstants.STORE_TREE) {
+			in.readBits(IHuffConstants.BITS_PER_INT);
+			root = treeHelp(in, root); //makes the tree when reading in headerBits
+		}
+	}
+
+	//recursive method that makes the tree when reading in headerBits for decompression using standard tree format
+	public TreeNode treeHelp(BitInputStream in, TreeNode t) throws IOException {
+		if (in.readBits(1) == 1) { 
+			return new TreeNode(in.readBits(IHuffConstants.BITS_PER_WORD + 1), 0);			
+		} else {
+			t = new TreeNode(0, 0);
+			t.setLeft(treeHelp(in, t.getLeft())); 
+			t.setRight(treeHelp(in, t.getRight()));	
+		}
+		return t;
+	}
+
+	//makes the frequency map for the compression huffmanTree
+	public void getMapCompress(BitInputStream file) throws IOException {
+		int ch;
+		while((ch = file.readBits(IHuffConstants.BITS_PER_WORD)) != -1) {
+			if(frequency.get(ch) != null) {
+				frequency.put(ch, frequency.get(ch) + 1);
+			} else {
+				frequency.put(ch, 1);
+			}
+		}
+		frequency.put(IHuffConstants.PSEUDO_EOF, 1);
+	}
+
+	//makes the frequency map for the decompression huffmanTree
+	public void getMapDecompress(BitInputStream file) throws IOException {
+		for (int ch = 0; ch < IHuffConstants.ALPH_SIZE; ch++) {
+			int x = file.readBits(IHuffConstants.BITS_PER_INT);
+			frequency.put(ch, x);
+		}
+		frequency.put(IHuffConstants.PSEUDO_EOF, 1);
+	}
+
+	//makes the priority queue of TreeNode objects using the frequency map
+	public void makePQ(Map<Integer, Integer> frequency) {
+		for(Integer ch : frequency.keySet()) {
+			int freq = frequency.get(ch);
+			if (freq != 0) {
+				TreeNode t = new TreeNode(ch, freq);
+				pq.add(t);
+			}
+		}
+	}
+
+	//fills the HuffmanTree using the priority queue
+	public void fillTree(PriorityQueue<TreeNode> pq) {
+		while(pq.size() >= 2) {
+			TreeNode left = pq.remove();
+			TreeNode right = pq.remove();
+			TreeNode t = new TreeNode(0, left.getFrequency() + right.getFrequency());
+			t.setLeft(left);
+			t.setRight(right);
+			pq.add(t);
+		}
+		root = pq.remove();
+	}
+
+	//method to access root (a TreeNode) frequency
+	public int getFrequency() {
+		return root.getFrequency();
+	}
+
+	//method to access root (a TreeNode) value
+	public int getValue() {
+		return root.getValue();
+	}
+
+	//method to access the root of a HuffmanTree object
+	public TreeNode getRoot() {
+		return root;
+	}
+
+	//method to access the frequencyMap
+	public Map<Integer, Integer> getFrequencyMap() {
+		return frequency;
+	}
+}
