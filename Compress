@@ -1,0 +1,163 @@
+import java.io.IOException;
+import java.util.Map;
+import java.util.TreeMap;
+
+//class that compresses and decompresses
+public class Compress {
+
+	//map that holds ascii value of character as keys and the their compressed codes as values
+	private Map<Integer, String> codes;
+
+	//a HuffmanTree object that is the root of the HuffmanTree
+	private HuffmanTree root;
+
+	//string of the headerBits for the store tree format
+	private String treeHeader;
+
+	//constructor that initializes instance variables and makes the compressed codes for each character
+	public Compress(HuffmanTree t) {
+		codes = new TreeMap<Integer, String>();
+		root = t;
+		treeHeader = "";
+		makeCodes();
+	}
+
+	//returns the number of headerBits either in store count format or store tree format
+	public int getHeaderBits(int header) {
+		if(header == IHuffConstants.STORE_COUNTS) {
+			return IHuffConstants.ALPH_SIZE * IHuffConstants.BITS_PER_INT;
+		} else if(header == IHuffConstants.STORE_TREE) {
+			StringBuilder s = new StringBuilder();
+			treeHeader = preOrder(root.getRoot(), s);
+			return IHuffConstants.BITS_PER_INT + treeHeader.length();
+		}
+		return 0;
+	}
+
+	//returns the number of dataBits for compression
+	public int getDataBits() {
+		int dataBits = 0;
+		for (Integer i : codes.keySet()) {
+			dataBits += codes.get(i).length() * root.getFrequencyMap().get(i);
+		}
+		return dataBits;
+	}
+
+	//makes the compressed codes for each character in inputStream
+	public void makeCodes() {
+		StringBuilder s = new StringBuilder();
+		makeCodesHelp(s, root.getRoot());
+	}
+
+	//recursive helper for makeCodes
+	//adds a 0 if traversing the tree to the left, or a 1 if traversing to the right
+	public void makeCodesHelp(StringBuilder s, TreeNode t) {
+		if(t.getLeft() == null && t.getRight() == null) {
+			codes.put(t.getValue(), s.toString());
+		} else {
+			s.append(0);
+			makeCodesHelp(s, t.getLeft());
+			s.deleteCharAt(s.length() - 1);
+			s.append(1);
+			makeCodesHelp(s, t.getRight());
+			s.deleteCharAt(s.length() - 1);
+		}
+	}
+
+	//method for compression
+	//writes out the header either for count format or tree format to the outputStream
+	public void writeHeader(int headerFormat, BitOutputStream bitOut) throws IOException {
+		if(headerFormat == IHuffConstants.STORE_COUNTS) {
+			for(int i = 0; i < IHuffConstants.ALPH_SIZE; i++) {
+				if(root.getFrequencyMap().get(i) == null) {
+					bitOut.writeBits(IHuffConstants.BITS_PER_INT, 0);
+				} else {
+					bitOut.writeBits(IHuffConstants.BITS_PER_INT, root.getFrequencyMap().get(i));
+				}
+			} 
+		} else if(headerFormat == IHuffConstants.STORE_TREE) {
+			bitOut.writeBits(IHuffConstants.BITS_PER_INT, treeHeader.length());
+			writeBitsFromString(bitOut, treeHeader);
+		}
+	}
+
+	//method for compression
+	//writes out data to the outputStream
+	public void writeData(BitInputStream bitIn, BitOutputStream bitOut) throws IOException {
+		int nextChar;
+		while((nextChar = bitIn.readBits(IHuffConstants.BITS_PER_WORD)) != -1) {
+			String code = codes.get(nextChar);
+			writeBitsFromString(bitOut, code);
+		}
+		String PEOFCode = codes.get(IHuffConstants.PSEUDO_EOF);
+		writeBitsFromString(bitOut, PEOFCode); 
+	}
+
+	//helper method to take in a string and explicitly write out bits from it
+	private void writeBitsFromString(BitOutputStream out, String toConvert) throws IOException {
+		for (int i = 0; i < toConvert.length(); i++) {
+			if (toConvert.charAt(i) == '1') {
+				out.writeBits(1, 1);
+			} else {
+				out.writeBits(1, 0);
+			}
+		}
+	}
+
+	//does a preorder traversal of HuffmanTree to get the header for the tree format
+	public String preOrder(TreeNode t, StringBuilder s) {
+		if(t.getLeft() == null && t.getRight() == null) {
+			s.append(1);
+			String bin = Integer.toBinaryString(t.getValue());
+			s.append(pad(bin));
+		} else {
+			s.append(0);
+			preOrder(t.getLeft(), s);
+			preOrder(t.getRight(), s);
+		}
+		return s.toString();
+	}
+
+	//pads the binary version of the ascii value to make it 9 bits
+	private String pad(String s) {
+		StringBuilder sb = new StringBuilder();
+		int num = (IHuffConstants.BITS_PER_WORD + 1) - s.length();
+		for(int i = 0; i < num; i++) {
+			sb.append(0);
+		}
+		sb.append(s);
+		return sb.toString();
+	}
+
+	//method for decompression
+	//writes the uncompressed data to the output stream
+	public int writeDataBack(BitInputStream bitIn, BitOutputStream bitOut) throws IOException {
+		int ch;
+		int original = 0;
+		boolean okayToContinue = true;
+		while(okayToContinue) {
+			ch = getNextChar(bitIn, root.getRoot());
+			if (ch != IHuffConstants.PSEUDO_EOF) {
+				original += IHuffConstants.BITS_PER_WORD;
+				bitOut.writeBits(IHuffConstants.BITS_PER_WORD, ch); 
+			} else if (ch == IHuffConstants.PSEUDO_EOF) { 
+				okayToContinue = false;
+			}
+		}
+		return original;
+	}
+
+	//traverses a HuffmanTree and returns the next leaf node
+	public int getNextChar(BitInputStream bitIn, TreeNode t) throws IOException {
+		if(t.getLeft() == null && t.getRight() == null) {
+			return t.getValue();
+		} else {
+			int ch = bitIn.readBits(1);
+			if (ch == 0) {
+				return getNextChar(bitIn, t.getLeft());
+			} else {
+				return getNextChar(bitIn, t.getRight());
+			}
+		}
+	}
+}
